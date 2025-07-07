@@ -1,12 +1,5 @@
-3Dplot.py
-animation.py
-check_for_covered_markers.py
 helper_functions.py
 *.c3d
-main.py
-read_c3d.py
 *.json
-TestClientPython.py
-TestRetimingClientPython.py
 .idea
 __pycache__
