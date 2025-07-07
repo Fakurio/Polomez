@@ -41,6 +41,10 @@ alignment = dtw(original_sequence, filtered_sequence, keep_internals=True)
 original_sequence_mapped = original_sequence[alignment.index1]
 filtered_sequence_mapped = filtered_sequence[alignment.index2]
 
+# Cut mapped sequences to length of original sequence
+original_sequence_mapped = original_sequence_mapped[:original_sequence.shape[0]]
+filtered_sequence_mapped = filtered_sequence_mapped[:original_sequence.shape[0]]
+
 fig, ax = plt.subplots(1, 3, figsize=(15, 5))
 ax[0].plot(range(original_sequence_mapped.shape[0]), original_sequence_mapped[:, 0], label="Original", color="red")
 ax[0].plot(range(filtered_sequence_mapped.shape[0]), filtered_sequence_mapped[:, 0], label="Estimated")

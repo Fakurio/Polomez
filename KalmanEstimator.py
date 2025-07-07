@@ -308,27 +308,27 @@ class KalmanEstimator:
                 # TODO: W gotowym systemie sam kalman daje rade a przekształcenia z rigid body do porównania
                 #  w pracy magisterskiej
 
-                # marker_neighbors = self.marker_groups.get(marker_name)
-                # visible_in_group: dict[str, np.ndarray] = {
-                #     m: np.array(frame_data.get(m)[0]) for m in marker_neighbors
-                #     if not frame_data.get(m)[1]
-                # }
-                # num_visible_in_group = len(visible_in_group)
-                #
-                # if num_visible_in_group == 3:
-                #     estimated_pos = self._estimate_from_rigid_body(marker_name, visible_in_group)
-                #
-                # elif num_visible_in_group == 2:
-                #     estimated_pos = self._estimate_two_visible(marker_name, visible_in_group)
-                #
-                # elif num_visible_in_group == 1:
-                #     estimated_pos = self._estimate_one_visible(marker_name, visible_in_group)
-                #
-                # elif num_visible_in_group == 0:
-                #     estimated_pos = self._estimate_all_missing(marker_name, marker_neighbors)
-                #
-                # new_mean, new_cov = kf.filter_update(kf.initial_state_mean, kf.initial_state_covariance,
-                #                                      observation=estimated_pos)
+                marker_neighbors = self.marker_groups.get(marker_name)
+                visible_in_group: dict[str, np.ndarray] = {
+                    m: np.array(frame_data.get(m)[0]) for m in marker_neighbors
+                    if not frame_data.get(m)[1]
+                }
+                num_visible_in_group = len(visible_in_group)
+
+                if num_visible_in_group == 3:
+                    estimated_pos = self._estimate_from_rigid_body(marker_name, visible_in_group)
+
+                elif num_visible_in_group == 2:
+                    estimated_pos = self._estimate_two_visible(marker_name, visible_in_group)
+
+                elif num_visible_in_group == 1:
+                    estimated_pos = self._estimate_one_visible(marker_name, visible_in_group)
+
+                elif num_visible_in_group == 0:
+                    estimated_pos = self._estimate_all_missing(marker_name, marker_neighbors)
+
+                new_mean, new_cov = kf.filter_update(kf.initial_state_mean, kf.initial_state_covariance,
+                                                     observation=estimated_pos)
 
                 kf.initial_state_mean = new_mean
                 kf.initial_state_covariance = new_cov

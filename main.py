@@ -60,6 +60,7 @@ if __name__ == "__main__":
     stop_event = threading.Event()
     estimator = KalmanEstimator(MARKER_GROUPS)
 
+    # TODO: finalnie trza jakoś rozpoznować kiedy zaczać i skończyć łapać klatki
     # FRAMES_COUNT = 3905 #k_krok_podstaw_uklon_polonez_1.3
     FRAMES_COUNT = 3534  # m_krok_podstaw_uklon_polonez_1b.3
 
