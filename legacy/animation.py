@@ -14,9 +14,9 @@ frames_count = len(frame_list)
 positions = np.full((len(frame_list), len(marker_list), 3), np.nan)
 for f_idx, frame in enumerate(frame_list):
     for m_idx, marker in enumerate(marker_list):
-        positions[f_idx, m_idx, 0] = data[frame][marker][0]
-        positions[f_idx, m_idx, 1] = data[frame][marker][1]
-        positions[f_idx, m_idx, 2] = data[frame][marker][2]
+        positions[f_idx, m_idx, 0] = data[frame][marker][0][0]
+        positions[f_idx, m_idx, 1] = data[frame][marker][0][1]
+        positions[f_idx, m_idx, 2] = data[frame][marker][0][2]
 x = positions[:, :, 0]
 y = positions[:, :, 1]
 z = positions[:, :, 2]

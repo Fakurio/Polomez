@@ -3,3 +3,7 @@ helper_functions.py
 *.json
 .idea
 __pycache__
+*.rar
+augmented_output
+estimated_output
+gap_generation_output

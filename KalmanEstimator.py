@@ -1,5 +1,9 @@
+from typing import Dict
+
 from pykalman import KalmanFilter
+from filterpy.kalman import UnscentedKalmanFilter, MerweScaledSigmaPoints
 import numpy as np
+import pandas as pd
 
 
 class KalmanEstimator:
@@ -18,6 +22,11 @@ class KalmanEstimator:
         self.n_dims = n_dims
         self.process_noise = process_noise
         self.observation_noise = observation_noise
+        # UKF params
+        self.alpha = 0.1
+        self.beta = 2.0
+        self.kappa = 0.0
+        self.epsilon = 0.5
 
         # Dictionary with marker positions in t-1 frame
         self.last_known_positions = {}
@@ -28,43 +37,107 @@ class KalmanEstimator:
         # Dictionary to store Kalman filters for each marker
         self.filters = {marker_name: self._create_kalman_filter() for marker_name in marker_groups.keys()}
 
+    @staticmethod
+    def _state_transition_function(state, dt):
+        """
+        State transition function (f) for the Unscented Kalman Filter.
+        Implements the Constant Acceleration Model (Fs) from the article (Eq. 2)[cite: 147].
+        State: [x, y, z, vx, vy, vz, ax, ay, az] (9D)
+        """
+        dt2_2 = dt ** 2 / 2.0
+
+        F = np.array([
+            [1, 0, 0, dt, 0, 0, dt2_2, 0, 0],
+            [0, 1, 0, 0, dt, 0, 0, dt2_2, 0],
+            [0, 0, 1, 0, 0, dt, 0, 0, dt2_2],
+            [0, 0, 0, 1, 0, 0, dt, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, dt, 0],
+            [0, 0, 0, 0, 0, 1, 0, 0, dt],
+            [0, 0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 1]
+        ])
+
+        return F @ state
+
+    @staticmethod
+    def _observation_function(state):
+        """
+        Observation function (h) for the Unscented Kalman Filter.
+        Observes the full 9D state (position, velocity, acceleration), as implied by
+        Hs = I9 * s in the article (Eq. 3).
+        """
+        return state
+
     def _create_kalman_filter(self):
         """
-        Create a Kalman filter for a single marker using a constant velocity model
+        Create an Unscented Kalman filter for a single marker using a constant acceleration model
+        (9D state) and parameters from the article (Section 3.1.2).
         """
-        # State transition matrix [x, y, z, vx, vy, vz]
-        F = np.array([
-            [1, 0, 0, self.dt, 0, 0],
-            [0, 1, 0, 0, self.dt, 0],
-            [0, 0, 1, 0, 0, self.dt],
-            [0, 0, 0, 1, 0, 0],
-            [0, 0, 0, 0, 1, 0],
-            [0, 0, 0, 0, 0, 1]
-        ])
+        # Process noise covariance matrix (9x9)
+        # Q is assumed proportional to identity matrix for the 9D state
+        Q = np.eye(self.n_dims * 3) * self.process_noise
 
-        # Observation matrix
-        H = np.array([
-            [1, 0, 0, 0, 0, 0],
-            [0, 1, 0, 0, 0, 0],
-            [0, 0, 1, 0, 0, 0]
-        ])
+        # Observation noise covariance matrix (9x9)
+        R = np.eye(self.n_dims * 3) * (self.epsilon ** 2)
 
-        # Process noise covariance matrix
-        Q = np.eye(self.n_dims * 2) * self.process_noise
-
-        # Observation noise covariance matrix
-        R = np.eye(self.n_dims) * self.observation_noise
-
-        kf = KalmanFilter(
-            transition_matrices=F,
-            observation_matrices=H,
-            transition_covariance=Q,
-            observation_covariance=R,
-            initial_state_mean=np.zeros(self.n_dims * 2),
-            initial_state_covariance=np.eye(self.n_dims * 2)
+        kf = UnscentedKalmanFilter(
+            dim_x=self.n_dims * 3,
+            dim_z=self.n_dims * 3,
+            dt=self.dt,
+            hx=self._observation_function,
+            fx=self._state_transition_function,
+            points=MerweScaledSigmaPoints(
+                n=self.n_dims * 3,
+                alpha=self.alpha,
+                beta=self.beta,
+                kappa=self.kappa
+            )
         )
+        kf.Q = Q
+        kf.R = R
+        kf.x = np.zeros(self.n_dims * 3)
+        kf.P = np.eye(self.n_dims * 3)
 
         return kf
+
+    # def _create_kalman_filter(self):
+    #     """
+    #     Create a Kalman filter for a single marker using a constant velocity model
+    #     """
+    #     # State transition matrix [x, y, z, vx, vy, vz]
+    #     F = np.array([
+    #         [1, 0, 0, self.dt, 0, 0],
+    #         [0, 1, 0, 0, self.dt, 0],
+    #         [0, 0, 1, 0, 0, self.dt],
+    #         [0, 0, 0, 1, 0, 0],
+    #         [0, 0, 0, 0, 1, 0],
+    #         [0, 0, 0, 0, 0, 1]
+    #     ])
+    #
+    #     # Observation matrix
+    #     H = np.array([
+    #         [1, 0, 0, 0, 0, 0],
+    #         [0, 1, 0, 0, 0, 0],
+    #         [0, 0, 1, 0, 0, 0]
+    #     ])
+    #
+    #     # Process noise covariance matrix
+    #     Q = np.eye(self.n_dims * 2) * self.process_noise
+    #
+    #     # Observation noise covariance matrix
+    #     R = np.eye(self.n_dims) * self.observation_noise
+    #
+    #     kf = KalmanFilter(
+    #         transition_matrices=F,
+    #         observation_matrices=H,
+    #         transition_covariance=Q,
+    #         observation_covariance=R,
+    #         initial_state_mean=np.zeros(self.n_dims * 2),
+    #         initial_state_covariance=np.eye(self.n_dims * 2)
+    #     )
+    #
+    #     return kf
 
     @staticmethod
     def _find_closest_point_on_circle(circle_center: np.ndarray, circle_radius: float, circle_normal: np.ndarray,
@@ -277,62 +350,206 @@ class KalmanEstimator:
 
         return estimated_pos
 
-    def estimate_frame(self, frame_data: dict[str, tuple[tuple, bool]]):
+    def estimate_frame(self, frame_data: dict[str, np.ndarray]):
         """
         Estimates missing markers for a single frame.
+        This method is compatible with gap generation script output by handling NaN data.
 
         Args:
-            frame_data: Dictionary {marker_name: ((x, y, z), is_occluded)}
+            frame_data: Dictionary {marker_name: [x, y, z]} where [x, y, z] can contain NaNs.
         """
         self.second_last_known_positions = self.last_known_positions.copy()
 
         final_estimated_positions = {}
 
+        # 1. Process and categorize data for the current frame
+        all_visible_markers_in_frame: dict[str, np.ndarray] = {}
+        processed_data: dict[str, tuple[np.ndarray, bool]] = {}  # (position, is_occluded)
+
+        for marker_name, position in frame_data.items():
+            is_occluded = np.any(np.isnan(position))
+            processed_data[marker_name] = (position, is_occluded)
+            if not is_occluded:
+                all_visible_markers_in_frame[marker_name] = position
+
         for marker_name in self.marker_groups.keys():
             kf = self.filters.get(marker_name)
-            is_occluded = frame_data.get(marker_name)[1]
+            observation, is_occluded = processed_data.get(marker_name)
+
+            final_pos = None
+            kf_observation = None
+
+            kf.predict()
+            current_mean = kf.x
 
             if not is_occluded:
-                observation = frame_data.get(marker_name)[0]
+                # Construct 9D observation: [Observed Pos (3D), Filter's Vel/Acc Prediction (6D)]
+                # The assumption here is that we use the current filter's predicted V/A as the measured V/A
+                # alongside the measured P.
+                kf_observation = np.concatenate((observation, current_mean[self.n_dims:]))
 
-                new_mean, new_cov = kf.filter_update(kf.initial_state_mean, kf.initial_state_covariance,
-                                                     observation=observation)
-                kf.initial_state_mean = new_mean
-                kf.initial_state_covariance = new_cov
-
-                final_estimated_positions[marker_name] = np.array(observation)
-                self.last_known_positions[marker_name] = np.array(observation)
-
+                # Final position is the observation itself
+                final_pos = observation
             else:
-                estimated_pos = None
-                # TODO: W gotowym systemie sam kalman daje rade a przekształcenia z rigid body do porównania
-                #  w pracy magisterskiej
-
                 marker_neighbors = self.marker_groups.get(marker_name)
-                visible_in_group: dict[str, np.ndarray] = {
-                    m: np.array(frame_data.get(m)[0]) for m in marker_neighbors
-                    if not frame_data.get(m)[1]
-                }
+
+                visible_in_group: dict[str, np.ndarray] = {}
+                for m in marker_neighbors:
+                    if m in all_visible_markers_in_frame:
+                        visible_in_group[m] = all_visible_markers_in_frame[m]
                 num_visible_in_group = len(visible_in_group)
 
-                if num_visible_in_group == 3:
-                    estimated_pos = self._estimate_from_rigid_body(marker_name, visible_in_group)
-
+                estimated_pos_3d = None
+                if num_visible_in_group >= 3:
+                    estimated_pos_3d = self._estimate_from_rigid_body(marker_name, visible_in_group)
                 elif num_visible_in_group == 2:
-                    estimated_pos = self._estimate_two_visible(marker_name, visible_in_group)
-
+                    estimated_pos_3d = self._estimate_two_visible(marker_name, visible_in_group)
                 elif num_visible_in_group == 1:
-                    estimated_pos = self._estimate_one_visible(marker_name, visible_in_group)
-
+                    estimated_pos_3d = self._estimate_one_visible(marker_name, visible_in_group)
                 elif num_visible_in_group == 0:
-                    estimated_pos = self._estimate_all_missing(marker_name, marker_neighbors)
+                    estimated_pos_3d = self._estimate_all_missing(marker_name, marker_neighbors)
 
-                new_mean, new_cov = kf.filter_update(kf.initial_state_mean, kf.initial_state_covariance,
-                                                     observation=estimated_pos)
+                if estimated_pos_3d is not None:
+                    # Construct 9D observation: [Geometric Estimate (3D), Filter's Vel/Acc Prediction (6D)]
+                    # We use the geometric estimate for P and the filter's prediction for V/A
+                    kf_observation = np.concatenate((estimated_pos_3d, current_mean[self.n_dims:]))
+                else:
+                    # If no geometric estimate, use None for a prediction-only step.
+                    kf_observation = None
 
-                kf.initial_state_mean = new_mean
-                kf.initial_state_covariance = new_cov
-                final_estimated_positions[marker_name] = new_mean[:self.n_dims]
-                self.last_known_positions[marker_name] = new_mean[:self.n_dims]
+            # If kf_observation is None, the filter update will be skipped internally (prediction-only)
+            kf.update(kf_observation)
+
+            # The new mean is now stored in kf.x
+            new_mean = kf.x
+
+            # If occluded, the final position is the filter's estimated position (x, y, z components of the 9D state)
+            if is_occluded:
+                final_pos = new_mean[:self.n_dims]
+
+            final_estimated_positions[marker_name] = final_pos
+            # Store the *position* part of the state as the last known position
+            self.last_known_positions[marker_name] = new_mean[:self.n_dims]
 
         return final_estimated_positions
+
+    # ------ Dla podstawowego kalman z constant velocity model --------------------
+    # def estimate_frame(self, frame_data: Dict[str, np.ndarray]):
+    #     """
+    #     Estimates missing markers for a single frame, compatible with CSV data (NaN for missing).
+    #
+    #     Args:
+    #         frame_data: Dictionary {marker_name: [x, y, z]} where [x, y, z] can contain NaNs.
+    #     """
+    #     self.second_last_known_positions = self.last_known_positions.copy()
+    #
+    #     final_estimated_positions = {}
+    #
+    #     all_visible_markers_in_frame: Dict[str, np.ndarray] = {
+    #         m: pos for m, pos in frame_data.items() if not np.any(np.isnan(pos))
+    #     }
+    #
+    #     for marker_name in self.marker_groups.keys():
+    #         kf = self.filters.get(marker_name)
+    #         position = frame_data.get(marker_name)
+    #         is_occluded = np.any(np.isnan(position))
+    #
+    #         if not is_occluded:
+    #             observation = position  # Raw 3D position
+    #             new_mean, new_cov = kf.filter_update(kf.initial_state_mean, kf.initial_state_covariance,
+    #                                                  observation=observation)
+    #             kf.initial_state_mean = new_mean
+    #             kf.initial_state_covariance = new_cov
+    #
+    #             final_estimated_positions[marker_name] = observation
+    #             self.last_known_positions[marker_name] = new_mean[:self.n_dims]
+    #
+    #         else:
+    #             estimated_pos = None
+    #
+    #             marker_neighbors = self.marker_groups.get(marker_name)
+    #             visible_in_group: Dict[str, np.ndarray] = {
+    #                 m: all_visible_markers_in_frame[m] for m in marker_neighbors
+    #                 if m in all_visible_markers_in_frame
+    #             }
+    #             num_visible_in_group = len(visible_in_group)
+    #
+    #             if num_visible_in_group >= 3:
+    #                 estimated_pos = self._estimate_from_rigid_body(marker_name, visible_in_group)
+    #             elif num_visible_in_group == 2:
+    #                 estimated_pos = self._estimate_two_visible(marker_name, visible_in_group)
+    #             elif num_visible_in_group == 1:
+    #                 estimated_pos = self._estimate_one_visible(marker_name, visible_in_group)
+    #             elif num_visible_in_group == 0:
+    #                 estimated_pos = self._estimate_all_missing(marker_name, marker_neighbors)
+    #
+    #             # Filter update/prediction using the geometric estimate (or None) as observation
+    #             new_mean, new_cov = kf.filter_update(kf.initial_state_mean, kf.initial_state_covariance,
+    #                                                  observation=estimated_pos)
+    #
+    #             kf.initial_state_mean = new_mean
+    #             kf.initial_state_covariance = new_cov
+    #
+    #             final_estimated_positions[marker_name] = new_mean[:self.n_dims]
+    #             self.last_known_positions[marker_name] = new_mean[:self.n_dims]
+    #
+    #     return final_estimated_positions
+
+    # ----------- OG wesja -----------------------
+    # def estimate_frame(self, frame_data: dict[str, tuple[tuple, bool]]):
+    #     """
+    #     Estimates missing markers for a single frame.
+    #
+    #     Args:
+    #         frame_data: Dictionary {marker_name: ((x, y, z), is_occluded)}
+    #     """
+    #     self.second_last_known_positions = self.last_known_positions.copy()
+    #
+    #     final_estimated_positions = {}
+    #
+    #     for marker_name in self.marker_groups.keys():
+    #         kf = self.filters.get(marker_name)
+    #         is_occluded = frame_data.get(marker_name)[1]
+    #
+    #         if not is_occluded:
+    #             observation = frame_data.get(marker_name)[0]
+    #
+    #             new_mean, new_cov = kf.filter_update(kf.initial_state_mean, kf.initial_state_covariance,
+    #                                                  observation=observation)
+    #             kf.initial_state_mean = new_mean
+    #             kf.initial_state_covariance = new_cov
+    #
+    #             final_estimated_positions[marker_name] = np.array(observation)
+    #             self.last_known_positions[marker_name] = np.array(observation)
+    #
+    #         else:
+    #             estimated_pos = None
+    #
+    #             marker_neighbors = self.marker_groups.get(marker_name)
+    #             visible_in_group: dict[str, np.ndarray] = {
+    #                 m: np.array(frame_data.get(m)[0]) for m in marker_neighbors
+    #                 if not frame_data.get(m)[1]
+    #             }
+    #             num_visible_in_group = len(visible_in_group)
+    #
+    #             if num_visible_in_group == 3:
+    #                 estimated_pos = self._estimate_from_rigid_body(marker_name, visible_in_group)
+    #
+    #             elif num_visible_in_group == 2:
+    #                 estimated_pos = self._estimate_two_visible(marker_name, visible_in_group)
+    #
+    #             elif num_visible_in_group == 1:
+    #                 estimated_pos = self._estimate_one_visible(marker_name, visible_in_group)
+    #
+    #             elif num_visible_in_group == 0:
+    #                 estimated_pos = self._estimate_all_missing(marker_name, marker_neighbors)
+    #
+    #             new_mean, new_cov = kf.filter_update(kf.initial_state_mean, kf.initial_state_covariance,
+    #                                                  observation=estimated_pos)
+    #
+    #             kf.initial_state_mean = new_mean
+    #             kf.initial_state_covariance = new_cov
+    #             final_estimated_positions[marker_name] = new_mean[:self.n_dims]
+    #             self.last_known_positions[marker_name] = new_mean[:self.n_dims]
+    #
+    #     return final_estimated_positions

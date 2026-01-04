@@ -4,54 +4,105 @@ from marker_groups import MARKER_GROUPS
 import numpy as np
 import threading
 import queue
-import json
+import time
+import pandas as pd
+import sys
 
 
-def convert_to_json(obj):
-    if isinstance(obj, (np.ndarray, np.ma.MaskedArray)):
-        return obj.tolist()
-    elif isinstance(obj, dict):
-        return {k: convert_to_json(v) for k, v in obj.items()}
-    else:
-        return obj
-
-
-def acquisition_thread(client, frames_queue, stop_event, frames_count):
-    print("Vicon acquisition thread started.")
+def acquisition_thread(client, frames_queue, stop_event):
+    print("Vicon acquisition thread started. Press Ctrl+C to stop.")
     frame_counter = 0
-    while not stop_event.is_set() and frame_counter < frames_count:
+
+    while not stop_event.is_set():
         if not client.GetFrame():
             continue
 
         frame_counter += 1
         subjects = client.GetSubjectNames()
         current_frame = {}
+
         for subject in subjects:
             markers = client.GetMarkerNames(subject)
             for marker in markers:
-                translation = client.GetMarkerGlobalTranslation(subject, marker[0])
-                current_frame[marker[0]] = translation
+                marker_name = marker[0]
 
-        frames_queue.put((frame_counter, current_frame))
+                # GetGlobalTranslation returns (X, Y, Z, Occluded)
+                translation_data = client.GetMarkerGlobalTranslation(subject, marker_name)
+
+                # Check if data is valid
+                if translation_data:
+                    x, y, z = translation_data[0], translation_data[1], translation_data[2]
+                    is_occluded = translation_data[3]
+
+                    if is_occluded:
+                        # KalmanEstimator expects NaNs for missing/occluded data
+                        current_frame[marker_name] = np.full(3, np.nan)
+                    else:
+                        current_frame[marker_name] = np.array([x, y, z])
+                else:
+                    current_frame[marker_name] = np.full(3, np.nan)
+
+        frames_queue.put(current_frame)
+
         if frame_counter % 300 == 0:
             print(f"Acquired #Frame: {frame_counter}")
+
     print("Vicon acquisition thread finished.")
-    stop_event.set()
 
 
 def processing_thread(frames_queue, processed_queue, estimator, stop_event):
     print("Processing thread started.")
+    frame_number = 0
+
     while not stop_event.is_set() or not frames_queue.empty():
         try:
-            frame_number, frame_data = frames_queue.get(timeout=0.1)
+            frame_data = frames_queue.get(timeout=0.1)
         except queue.Empty:
             continue
 
+        frame_number += 1
         estimated_frame = estimator.estimate_frame(frame_data)
-        processed_queue.put((f"frame_{frame_number}", estimated_frame))
+        processed_queue.put(estimated_frame)
+
         if frame_number % 300 == 0:
-            print(f"Estimated #frame: {frame_number}")
+            print(f"Estimated #Frame: {frame_number}")
+
     print("Processing thread finished.")
+
+
+def save_to_csv(processed_data, filename="output_sequence.csv"):
+    print(f"Saving {len(processed_data)} frames to {filename}...")
+
+    if not processed_data:
+        print("No data to save.")
+        return
+
+    # Flatten data for CSV format: LFHD_X, LFHD_Y, LFHD_Z,
+    flattened_rows = []
+    first_frame = processed_data[0]
+    marker_names = sorted(list(first_frame.keys()))
+
+    headers = []
+    for m in marker_names:
+        headers.extend([f"{m}_X", f"{m}_Y", f"{m}_Z"])
+
+    for frame in processed_data:
+        row = {}
+        for marker in marker_names:
+            pos = frame.get(marker)
+            if pos is not None and not np.any(np.isnan(pos)):
+                row[f"{marker}_X"] = pos[0]
+                row[f"{marker}_Y"] = pos[1]
+                row[f"{marker}_Z"] = pos[2]
+            else:
+                # Handle cases where estimation might have failed (leave empty or 0)
+                # Typically pandas handles missing keys as NaN
+                pass
+        flattened_rows.append(row)
+
+    df = pd.DataFrame(flattened_rows, columns=headers)
+    df.to_csv(filename, index=False)
+    print("Done.")
 
 
 if __name__ == "__main__":
@@ -60,39 +111,48 @@ if __name__ == "__main__":
     stop_event = threading.Event()
     estimator = KalmanEstimator(MARKER_GROUPS)
 
-    # TODO: finalnie trza jakoś rozpoznować kiedy zaczać i skończyć łapać klatki
-    # FRAMES_COUNT = 3905 #k_krok_podstaw_uklon_polonez_1.3
-    FRAMES_COUNT = 3534  # m_krok_podstaw_uklon_polonez_1b.3
-
     client = ViconDataStream.Client()
-    client.Connect("localhost")
+    try:
+        client.Connect("localhost")
+        while not client.IsConnected():
+            print("Connecting to Vicon...")
+            time.sleep(1)
+        print("Connected to datastream")
 
-    while not client.IsConnected():
-        pass
-    print("Connected to datastream")
+        client.EnableMarkerData()
+        client.EnableSegmentData()
 
-    client.EnableMarkerData()
+        acq_thread = threading.Thread(target=acquisition_thread,
+                                      args=(client, raw_frames_queue, stop_event))
+        proc_thread = threading.Thread(target=processing_thread,
+                                       args=(raw_frames_queue, processed_frames_queue, estimator, stop_event))
 
-    acquisition_thread = threading.Thread(target=acquisition_thread,
-                                          args=(client, raw_frames_queue, stop_event, FRAMES_COUNT))
-    filter_thread = threading.Thread(target=processing_thread,
-                                     args=(raw_frames_queue, processed_frames_queue, estimator, stop_event))
-    acquisition_thread.start()
-    filter_thread.start()
+        acq_thread.start()
+        proc_thread.start()
 
-    acquisition_thread.join()
-    filter_thread.join()
+        while True:
+            time.sleep(0.5)
 
-    print("\nDatastream collection and processing done")
+    except KeyboardInterrupt:
+        print("\nStopping capture...")
+        stop_event.set()
 
-    client.Disconnect()
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        stop_event.set()
 
-    # Save processed frames to JSON
-    final_frames = {}
-    while not processed_frames_queue.empty():
-        key, value = processed_frames_queue.get()
-        final_frames[key] = value
+    finally:
+        if 'acq_thread' in locals() and acq_thread.is_alive():
+            acq_thread.join()
+        if 'proc_thread' in locals() and proc_thread.is_alive():
+            proc_thread.join()
+        if client.IsConnected():
+            client.Disconnect()
 
-    serializable_data = convert_to_json(final_frames)
-    with open("sequence_with_kalman_online.json", "w") as file:
-        json.dump(serializable_data, file)
+        # Collect results
+        final_frames_list = []
+        while not processed_frames_queue.empty():
+            final_frames_list.append(processed_frames_queue.get())
+
+        # Save to CSV
+        save_to_csv(final_frames_list, "captured_sequence_estimated.csv")

@@ -1,5 +1,4 @@
 from typing import List, Callable
-
 import numpy as np
 from numpy import ndarray
 
@@ -10,8 +9,10 @@ class LMAHelper:
                                           window_step=1):
         """
         Args:
-            original_vector: array in shape (n_frames, n_features)
-            user_vector: array in shape (n_frames, n_features)
+            :param original_vector: array in shape (n_frames, n_features)
+            :param user_vector: array in shape (n_frames, n_features)
+            :param window_step: rolling window step
+            :param window_size: rolling widow size
         """
 
         original_features = []
@@ -50,8 +51,10 @@ class LMAHelper:
         """
         Calculates distances for whole sequence using calculation_method function
         Args:
-            aligned_data: {marker_name: array of shape (n_frames, 3)}
-            calculation_method: one of functions calculate_distance_for_...
+            :param aligned_data: {marker_name: array of shape (n_frames, 3)}
+            :param markers: list of marker names
+            :param num_frames: frame count
+            :param calculation_method: one of functions calculate_distance_for_...
         """
         dist_vector = []
         for i in range(num_frames):
@@ -65,7 +68,7 @@ class LMAHelper:
         """
         Calculates distances for one frame
         Args:
-            markers_data: {marker_name: [x, y, z]}
+            :param markers_data: {marker_name: [x, y, z]}
         """
 
         # Feet to hip distance
@@ -94,7 +97,7 @@ class LMAHelper:
         """
         Calculates distances for one frame
         Args:
-           markers_data: {marker_name: [x, y, z]}
+           :param markers_data: {marker_name: [x, y, z]}
         """
 
         # Calculate distances for head orientation
@@ -110,7 +113,7 @@ class LMAHelper:
         """
         Calculates features for whole sequence
         Args:
-            markers_data: {marker_name: array in shape (n_frames, 3)}
+            :param markers_data: {marker_name: array in shape (n_frames, 3)}
         """
         # Calculate the root joint position as mean of hips markers
         root_joint_positions = (
