@@ -3,6 +3,7 @@ numpy
 matplotlib
 ezc3d
 vicon_dssdk
-dtw-python
 pandas
 scipy
+filterpy
+torch

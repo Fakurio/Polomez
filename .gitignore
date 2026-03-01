@@ -4,6 +4,8 @@ helper_functions.py
 .idea
 __pycache__
 *.rar
+*.csv
 augmented_output
 estimated_output
 gap_generation_output
+captured_data
