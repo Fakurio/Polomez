@@ -2,6 +2,17 @@ from filterpy.kalman import UnscentedKalmanFilter, MerweScaledSigmaPoints
 import numpy as np
 
 
+# 4000 -> 36
+# 6000 -> 33
+# 8000 -> 32.19
+# 9000 -> 31.96
+# 10000 -> 31.86
+# 11000 -> 31.84
+# 12000 -> 31
+# 13000 -> 31.99
+# 16000 -> 32
+# 14000 -> 32
+
 class KalmanEstimator:
     def __init__(self, marker_groups: dict[str, list[str]], n_dims: int = 3, dt: float = 1 / 100.0):
         """
@@ -12,7 +23,7 @@ class KalmanEstimator:
         self.marker_groups = marker_groups
         self.dt = dt
         self.n_dims = n_dims
-        self.process_noise = 2000.0
+        self.process_noise = 11000.0
         self.observation_noise = 1.0
         # UKF params
         self.alpha = 0.1
@@ -100,7 +111,7 @@ class KalmanEstimator:
             Q[i + 2 * self.n_dims, i + 2 * self.n_dims] = q33
         Q *= self.process_noise
 
-        R = np.eye(dim_z) * self.observation_noise
+        R = np.eye(dim_z) * self.observation_noise * (self.epsilon ** 2)
 
         kf = UnscentedKalmanFilter(
             dim_x=dim_x,

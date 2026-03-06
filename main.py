@@ -8,7 +8,6 @@ import signal
 from vicon_dssdk import ViconDataStream
 from KalmanEstimator import KalmanEstimator
 from marker_groups import MARKER_GROUPS
-from estimators import KalmanEstimatorWrapper, LSTMEstimator
 from UDPStreamer import UDPStreamer
 
 
@@ -93,11 +92,9 @@ def processing_process(mode, model_path, marker_groups, frames_queue, processed_
 
     if mode == "kalman":
         print("[Processing] Initializing Kalman Estimator...")
-        core_estimator = KalmanEstimator(marker_groups)
-        estimator = KalmanEstimatorWrapper(core_estimator)
+        estimator = KalmanEstimator(marker_groups)
     else:
-        print(f"[Processing] Initializing LSTM Estimator (Model: {model_path})...")
-        estimator = LSTMEstimator(model_path=model_path, root_marker="LASI")
+        print("[Processing] Initializing transparent mode...")
 
     frame_number = 0
     while True:
@@ -107,7 +104,10 @@ def processing_process(mode, model_path, marker_groups, frames_queue, processed_
             break
 
         frame_number += 1
-        estimated_frame = estimator.estimate_frame(frame_data)
+        if mode == "kalman":
+            estimated_frame = estimator.estimate_frame(frame_data)
+        else:
+            estimated_frame = frame_data
 
         processed_queue.put(estimated_frame)
         processed_frames_to_send_queue.put(estimated_frame)
@@ -138,6 +138,7 @@ def streamer_process(pc2_ip, port_llm, processed_frames_to_send_queue):
         streamer.send(frame_data)
 
         if frame_number % 100 == 0:
+            print("Streaming frame: ", frame_data)
             print(f"[Streaming] Frame: {frame_number}")
 
     print("[Streaming] Process finished.")
@@ -177,7 +178,7 @@ def save_to_csv(processed_data, filename="output_sequence.csv"):
 
 
 def main():
-    MODE = "kalman"
+    MODE = "none"
     MODEL_PATH = ""
     VICON_HOST = "localhost"
     PC2_IP = "127.0.0.1"

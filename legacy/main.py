@@ -8,7 +8,7 @@ import threading
 import queue
 import time
 import pandas as pd
-from estimators import KalmanEstimatorWrapper, LSTMEstimator
+from estimators import KalmanEstimatorWrapper
 from UDPStreamer import UDPStreamer
 
 
@@ -138,7 +138,6 @@ def main():
         estimator = KalmanEstimatorWrapper(core_estimator)
     else:
         print(f"Initializing LSTM Estimator (Model: {MODEL_PATH})...")
-        estimator = LSTMEstimator(model_path=MODEL_PATH, root_marker="LASI")
 
     # --- Setup Queues & Vicon ---
     raw_frames_queue = queue.Queue()

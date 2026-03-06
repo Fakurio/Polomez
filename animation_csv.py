@@ -6,7 +6,7 @@ import pandas as pd
 matplotlib.use('TkAgg')
 from matplotlib import pyplot as plt
 
-CSV_FILE_PATH = "estimated_output/filled_k_krok_podstaw_uklon_polonez_1_orig_10m_100f_c3.csv"
+CSV_FILE_PATH = "captured_data/captured_sequence_estimated.csv"
 TARGET_MARKERS = ['LFHD', 'RFHD', 'LBHD', 'RBHD', 'C7', 'T10', 'CLAV', 'STRN', 'RBAK', 'LSHO', 'LUPA', 'LELB', 'LFRM',
                   'LWRA', 'LWRB', 'LFIN', 'RSHO', 'RUPA', 'RELB', 'RFRM', 'RWRA', 'RWRB', 'RFIN', 'LASI', 'RASI',
                   'LPSI', 'RPSI', 'LTHI', 'LKNE', 'LTIB', 'LANK', 'LHEE', 'LTOE', 'RTHI', 'RKNE', 'RTIB', 'RANK',

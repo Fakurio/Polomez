@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 from KalmanEstimator import KalmanEstimator
 from marker_groups import MARKER_GROUPS
-from estimators import KalmanEstimatorWrapper, LSTMEstimator
+from estimators import KalmanEstimatorWrapper, LSTMXYZEstimator
 
 GAP_GENERATION_DIR = "gap_generation_output"
 ESTIMATION_OUTPUT_DIR = "estimated_output"
 N_FILES_TO_ESTIMATE = 1
-CSV_FILE_PATH = "gap_generation_output/k_krok_podstaw_uklon_polonez_1_orig_10m_100f_c3.csv"
+CSV_FILE_PATH = "gap_generation_output/m_krok_podstawowy_polonez_2_orig_2m_100f_c4.csv"
 
 
 def get_estimator(mode, model_path=None):
@@ -22,7 +22,7 @@ def get_estimator(mode, model_path=None):
         if not model_path:
             raise ValueError("Model path required for LSTM mode")
         print(f"[INFO] Using LSTM Estimator (Model: {model_path})")
-        return LSTMEstimator(model_path=model_path, root_marker="LASI")
+        return LSTMXYZEstimator(model_path=model_path, root_marker="LASI", seq_len=60)
 
 
 def estimate_file(file_path: str, estimator):
