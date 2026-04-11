@@ -44,7 +44,7 @@ class KalmanEstimator:
     def _state_transition_function(state, dt):
         """
         State transition function (f) for the Unscented Kalman Filter.
-        Implements the Constant Acceleration Model.
+        Implements the Singer Model.
         State: [x, y, z, vx, vy, vz, ax, ay, az] (9D)
         """
         dt2_2 = dt ** 2 / 2.0
